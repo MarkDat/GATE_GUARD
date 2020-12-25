@@ -19,20 +19,28 @@ namespace GATE_GUARD2.Db
             context = new DbDTUContext();
         }
 
-        public void addNewUser(AcceptUser u)
+        public bool addNewUser(AcceptUser u)
         {
             string q = "";
+            bool checkParking = findParking(u.id) == null ? false : true;
+            if (checkParking) {
+                Console.WriteLine("Đang đỗ");
+                return false;
+            } 
+
             bool checkUser = findUser(u.id)==null ? false:true;
             bool checkPlate = findPlate(u.txtPlate) == null ? false : true;
-            bool checkParking = findParking(u.id) == null ? false : true;
+           
+
             if ( !checkUser && !checkPlate )
             {
-                q = "EXEC dbo.addAllUser @ids,@id,@name,@imgPath,@imgPlatePath,@txtPlate,@dtIn,@status,@dtOut";
+                q = "EXEC dbo.addAllUser @ids,@id,@name,@position,@imgPath,@imgPlatePath,@txtPlate,@dtIn,@status,@dtOut";
                 using (SqlCommand command = new SqlCommand(q, conn))
                 {
                     command.Parameters.AddWithValue("@ids", u.idT);
                     command.Parameters.AddWithValue("@id", u.id);
                     command.Parameters.AddWithValue("@name", u.name);
+                    command.Parameters.AddWithValue("@position", u.position);
                     command.Parameters.AddWithValue("@imgPath", u.plateImg);
                     command.Parameters.AddWithValue("@imgPlatePath", "");
                     command.Parameters.AddWithValue("@txtPlate", u.txtPlate);
@@ -47,18 +55,19 @@ namespace GATE_GUARD2.Db
                         Console.WriteLine("Error inserting data into Database!");
                 }
                 Console.WriteLine("Add all success");
-                return;
+                return true;
             }
 
 
             if (!checkUser)
             {
-                q = "EXEC dbo.addUser @ids,@id,@name";
+                q = "EXEC dbo.addUser @ids,@id,@name,@position";
                 using (SqlCommand command = new SqlCommand(q, conn))
                 {
                     command.Parameters.AddWithValue("@ids", u.idT);
                     command.Parameters.AddWithValue("@id", u.id);
                     command.Parameters.AddWithValue("@name", u.name);
+                    command.Parameters.AddWithValue("@position", u.position);
                     conn.Open();
                     int result = command.ExecuteNonQuery();
                     conn.Close();
@@ -66,7 +75,7 @@ namespace GATE_GUARD2.Db
                     if (result < 0)
                     {
                         Console.WriteLine("Error inserting data into Database!");
-                        return;
+                        return true;
                     }
                        
                 }
@@ -87,20 +96,21 @@ namespace GATE_GUARD2.Db
                     if (result < 0)
                     {
                         Console.WriteLine("Error inserting data into Database!");
-                        return;
+                        return true;
                     }
                 }
                 Console.WriteLine("Add plate success");
             }
             if (!checkParking)
             {
-                q = "EXEC dbo.addParking @id,@txtPlate,@dtIn,@status,@dtOut";
+                q = "EXEC dbo.addParking @id,@txtPlate,@dtIn,@status,@isInOK,@dtOut";
                 using (SqlCommand command = new SqlCommand(q, conn))
                 {
                     command.Parameters.AddWithValue("@id", u.id);
                     command.Parameters.AddWithValue("@txtPlate", u.txtPlate);
                     command.Parameters.AddWithValue("@dtIn", DateTime.Parse(u.dateSend));
                     command.Parameters.AddWithValue("@status", "true");
+                    command.Parameters.AddWithValue("@isInOK", u.isInOK ? "true":"false");
                     command.Parameters.AddWithValue("@dtOut", DateTime.Now);
                     conn.Open();
                     int result = command.ExecuteNonQuery();
@@ -109,11 +119,13 @@ namespace GATE_GUARD2.Db
                     if (result < 0)
                     {
                         Console.WriteLine("Error inserting data into Database!");
-                        return;
+                        return true;
                     }
                     Console.WriteLine("Add parkinng success");
                 }
+                
             }
+            return true;
         }
         public List<UserList> getListParking()
         {

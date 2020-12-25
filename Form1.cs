@@ -1,7 +1,10 @@
-﻿using FireSharp;
+﻿using AutoMapper;
+using Firebase.Storage;
+using FireSharp;
 using FireSharp.Config;
 using FireSharp.Interfaces;
 using FireSharp.Response;
+using GATE_GUARD2.Common;
 using GATE_GUARD2.Dao;
 using GATE_GUARD2.Db;
 using GATE_GUARD2.Models;
@@ -14,6 +17,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -34,39 +38,95 @@ namespace GATE_GUARD2
             dataGridView1.AutoGenerateColumns = false;
             dataGridView1.DataSource = null;
             dataGridView2.AutoGenerateColumns = false;
+        
             dataGridView2.DataSource = uD.getListParking();
-         
+
+            pnOK.Visible = false;
+            tsBar.Maximum = 100;
             listen();
         }
+        public Form1(Guard g, IFirebaseClient cl,Login login)
+        {
+            InitializeComponent();
+            
+            this.cl = cl;
+            this.g = g;
+            this.loginForm = login;
+            var configMap = new MapperConfiguration(cfg => cfg.CreateMap<AcceptUserTemp, AcceptUser>());
+            mapper= configMap.CreateMapper();
+
+            lbCode.Text ="Code: "+g.Id;
+            pbLoadingOut.Visible = false;
+            pbLoadingIn.Visible = false;
+            pbLoadPlate.Visible = false;
+            pbloadAvatar.Visible = false;
+            pbLoadingOut.Image = Image.FromFile(Application.StartupPath + @"\img\icon\loading.gif");
+            pbLoadingIn.Image = Image.FromFile(Application.StartupPath + @"\img\icon\loading.gif");
+            pbloadAvatar.Image = Image.FromFile(Application.StartupPath + @"\img\icon\loading.gif");
+            pbLoadPlate.Image = Image.FromFile(Application.StartupPath + @"\img\icon\loading.gif");
+            pictureBox1.Image = Image.FromFile(Application.StartupPath + @"\img\logo\logo.png");
+            pictureBox2.Image = Image.FromFile(Application.StartupPath + @"\img\logo\logo.png");
+            dataGridView1.AutoGenerateColumns = false;
+            dataGridView1.DataSource = null;
+            dataGridView2.AutoGenerateColumns = false;
+            lUOK = uD.getListParking();
+            dataGridView2.DataSource = uD.getListParking();
+
+            string loca = "";
+            switch (g.Place)
+            {
+                case 0: loca = "Quang Trung"; BLOCK = 0;  break;
+                case 1: loca = "Hoa Khanh"; BLOCK = 1; break;
+                case 2: loca = "254 Nguyen Van Linh"; BLOCK = 2; break;
+                case 3: loca = "334 Nguyen Van Linh"; BLOCK = 3; break;
+            }
+            tsL.Text = loca;
+            listen();
+        }
+
+        Login loginForm;
+        Guard g;
         IFirebaseConfig config;
         IFirebaseClient cl;
         EventStreamResponse x;
         EventStreamResponse xErr;
-        const int BLOCK = 1;
+        int BLOCK = 1;
         List<AcceptUser> lAU = new List<AcceptUser>();
         List<UserList> lUOK = new List<UserList>();
         UserDao uD = new UserDao();
         const float moneyPay = 1000;
+        IMapper mapper;
 
-        async void listen()
+        private async void listen()
         {
             x = await cl.OnAsync("APIParking/Parking/IdList/" + BLOCK, added: (s, args, d) =>
             {
                 Console.WriteLine(args.Data);
                 FirebaseResponse userFalse = cl.Get("APIParking/Parking/InfoList/" + BLOCK + "/" + args.Data);
-                AcceptUser acU = userFalse.ResultAs<AcceptUser>();
+                AcceptUserTemp rs = userFalse.ResultAs<AcceptUserTemp>();
+                AcceptUser acU = mapper.Map<AcceptUserTemp,AcceptUser>(rs);
                 //Nếu đó là lúc vào và lỗi 
                 if (acU.lineOutIn == 1)
                 {
                     if (acU.status == 0)
                     {
-                            lAU.Add(acU);
-                            updateGrid();
+                        Thread t = new Thread(()=> {
+                            loop:
+                            Console.WriteLine("Loop image");
+                            acU.imageInPlate = getDownloadImage(acU.id, true, true);
+                            if (acU.imageInPlate == null) goto loop;
+
+                                lAU.Add(acU);
+                                updateGrid();
+                                
+                        });
+                            t.Start();
+                             
                     }
                     else
                     {
-                        uD.addNewUser(acU);
-                        updateGrid2();
+                        Console.WriteLine("Vo dayyyyy");
+                       if(uD.addNewUser(acU)) updateGrid2();
                     }
                 }
 
@@ -91,18 +151,37 @@ namespace GATE_GUARD2
                 }
             });
 
+
             xErr = await cl.OnAsync("APIParking/Parking/IdListErrOut/" + BLOCK, added: (s, args, d) =>
             {
                 Console.WriteLine("OKOK IdListErrOut");
                 //if (lAU.Find(x => x.id == args.Data)!=null) return;
 
                 FirebaseResponse resCheck = cl.Get("APIParking/Parking/InfoList/" + BLOCK + "/" + args.Data);
-                AcceptUser user = resCheck.ResultAs<AcceptUser>();
+                AcceptUserTemp rs = resCheck.ResultAs<AcceptUserTemp>();
+                AcceptUser user = mapper.Map<AcceptUserTemp, AcceptUser>(rs);
+
                 Console.WriteLine(args.Data);
+                Console.WriteLine("Is in OK ? "+user.isInOK);
                 lAU.RemoveAll(x=>x.id.Equals(user.id));
-                lAU.Add(user);
-                updateGrid();
-                
+
+
+
+                Thread t = new Thread(() => {
+                    bool isNotNull = true;
+                    while (isNotNull)
+                    {
+                        Console.WriteLine("Loop image");
+                        user.imageInPlate = getDownloadImage(user.id, true, true);
+                        user.imageOutPlate = getDownloadImage(user.id, true, false);
+                        if (user.imageInPlate != null && user.imageOutPlate != null) isNotNull = false;
+                    }
+                    
+                    lAU.Add(user);
+                    updateGrid();
+                });
+                t.Start();
+
                 switch (user.codeErr)
                 {
                     case 0: Console.WriteLine("Sai biển số"); break;
@@ -134,12 +213,12 @@ namespace GATE_GUARD2
             }));
         }
 
-        void acceptIn(AcceptUser ac)
+        void updateParking(AcceptUser ac)
         {
             cl.Update("APIParking/Parking/InfoList/"+ac.block+"/"+ac.id, ac);
         }
 
-        void updateGridRemove(int index)
+        public void updateGridRemove(int index)
         {
             lAU.RemoveAll(r => r.id == lAU[index].id);
             dataGridView1.Invoke(new Action(() => {
@@ -217,99 +296,239 @@ namespace GATE_GUARD2
             if (res.Body.Equals("null")) return -1;
             return res.ResultAs<double>();
         }
-        private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        public void acceptIn(AcceptUser u,int index, bool isOk)
         {
-            if (dataGridView1.Columns[e.ColumnIndex].Name.Equals("Accept"))
+            Thread t = new Thread(()=>
             {
-                int index = int.Parse(e.RowIndex.ToString());
-                
-                if (MessageBox.Show("Accept ?", "Message", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question) == DialogResult.Yes)
+                if (isOk)
                 {
-                    Console.WriteLine("OK Accept " + lAU[index].id);
-                    AcceptUser ac = lAU[index];
-                    //Check line vao hay line râ
-                    if (ac.lineOutIn == 1)
-                    {
-                        Console.WriteLine("Cổng vào");
-                        //Check type loi
-                        //Nếu đây là lỗi đọc sai biển số
-                        if(ac.codeErr==0)
-                        {
-                            ac.txtPlate = "NOD";
-                            ac.codeErr = 2;
-                            ac.status = 2;
-                            acceptIn(ac);
-                            updateGridRemove(index);
-                            //Them vao SQL
-                            uD.addNewUser(ac);
-                            updateGrid2();
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("Cổng ra");
-                        //Có 2 lỗi đặc biệt
-                        //Không đọc được biển số
-                        //Kiểm tra tiền không đủ
-                        //Nếu không đọc được biển số
-                        //Kiểm tra tiền, nếu còn tiền thì cho qua, không còn tiền thì không cho qua
-                        switch (ac.codeErr)
-                        {
-                            case 0:
-                                
-                                ac.status = 2;
-                                ac.codeErr = 2;
-                                ac.txtPlate = "NOD";
-                                //Đưa xác nhận sang cổng
-                                acceptIn(ac);
-                                //Thanh toán tiền
-                                payMoney(ac.id, moneyPay);
-                                removeIdErrList(ac);
-                                //Add giao dịch
-                                addHistory(ac, moneyPay);
-                                //Xóa info trên APIParing
-                                removeUserIn(ac);
-                                //Cập nhật lại danh sách lỗi gridview
-                                updateGridRemove(index);
-                                //Xóa  IdErrList
-                                return;
-                            case 1:
-                                ac.status = 2;
-                                ac.codeErr = 2;
-                                acceptIn(ac);
-                                removeIdErrList(ac);
-                                addHistory(ac, 0);
-                                removeUserIn(ac);
-                                updateGridRemove(index);
-                                Console.WriteLine("OK da cho qua vi thieu tien");
-                                return;
-                        }
-                    }
+                    u.status = 2;
+                    u.codeErr = 2;
+                    u.txtPlate = "NOD";
+                    updateParking(u);
+                    uD.addNewUser(u);
+                    updateGrid2();
                 }
                 else
                 {
-                    Console.WriteLine("Khong cho di qua");
-                    AcceptUser ac = lAU[index];
-                    if (ac.lineOutIn == 1)
-                    {
-                        if (ac.codeErr == 0)
-                        {
-                            ac.status = 1;
-                            ac.codeErr = 2;
-                            ac.txtPlate = "NOD";
-                            acceptIn(ac);
-                            removeUserIn(ac);
-                            updateGridRemove(index);
-                        }
-                    }
-                    else
-                    {
-
-                    }
-                    
+                    u.status = 1;
+                    u.codeErr = 2;
+                    u.txtPlate = "NOD";
+                    updateParking(u);
+                    removeUserIn(u);
                 }
-               
+            });
+            updateGridRemove(index);
+            t.Start();
+        }
+        public void acceptOut(AcceptUser u, int index, bool isOk) {
+            Thread t = new Thread(() => {
+                if (isOk)
+                {
+                    u.status = 2;
+                    u.codeErr = 2;
+                    u.txtPlate = "NOD";
+                    //Đưa xác nhận sang cổng
+                    updateParking(u);
+                    //Thanh toán tiền
+                    payMoney(u.id, moneyPay);
+                    removeIdErrList(u);
+                    //Add giao dịch
+                    addHistory(u, moneyPay);
+                    //Xóa info trên APIParing
+                    removeUserIn(u);
+                }
+                else
+                {
+                    u.status = 1;
+                    u.codeErr = 2;
+                    u.txtPlate = "NOD";
+                    updateParking(u);
+                    removeIdErrList(u);
+                    u.status = 2;
+                    updateParking(u);
+                }
+            });
+            t.Start();
+            updateGridRemove(index);
+        }
+        private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            pnOK.Visible = false;
+            pnErr.Visible = true;
+            if (dataGridView1.Columns[e.ColumnIndex].Name.Equals("Accept"))
+            {
+                int index = int.Parse(e.RowIndex.ToString());
+                bool isOK;
+                AcceptUser ac = lAU[index];
+                if (MessageBox.Show("Accept ?", "Message", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    isOK = true;
+
+                    if (ac.lineOutIn == 1) acceptIn(ac, index, isOK);
+                    else acceptOut(ac, index, isOK);
+                }
+                else
+                {
+                    isOK = false;
+                    if (ac.lineOutIn == 1) acceptIn(ac, index, isOK);
+                    else acceptOut(ac, index, isOK);
+                }
             }
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            
+            Application.Exit();
+        }
+
+        private async void dataGridView1_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            pnOK.Visible = false;
+            pnErr.Visible = true;
+
+            pbLoadingIn.Visible = true;
+            pbLoadingOut.Visible = true;
+            Console.WriteLine(lAU[e.RowIndex].id);
+            lbTextLine.Text = lAU[e.RowIndex].line + "";
+            lbTextGate.Text = lAU[e.RowIndex].lineOutIn==1 ? "Line In":"Line Out";
+
+            string id = lAU[e.RowIndex].id;
+            string inOut = "";
+            if (lAU[e.RowIndex].lineOutIn == 1)
+            {
+                //await setDownloadImage(pictureBox1,id,true,true);
+                pictureBox1.Image = lAU[e.RowIndex].imageInPlate;
+                pbLoadingIn.Visible = false;
+                pbLoadingOut.Visible = false;
+            }
+            else
+            {
+                pictureBox1.Image = lAU[e.RowIndex].imageInPlate;
+                pictureBox2.Image = lAU[e.RowIndex].imageOutPlate;
+                pbLoadingIn.Visible = false;
+                pbLoadingOut.Visible = false;
+                //await setDownloadImage(pictureBox2, id,true, false);
+            }
+            
+        }
+        
+        private async void dataGridView2_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            tsBar.Value = 10;
+            pnOK.Visible = true;
+            pnErr.Visible = false;
+            //UserList u = lUOK[e.RowIndex];
+            //string id = u.ID;
+            //Console.WriteLine(id);
+            pbloadAvatar.Visible = true;
+            pbLoadPlate.Visible = true;
+           
+            getDatatoInfoAsync(e.RowIndex);
+            tsBar.Value = 100;
+        }
+
+        Image getDownloadImage(string id, bool isErr, bool isIn)
+        {
+            string inOut = isIn ? "in" : "out";
+            string errOrOK = isErr ? "imgErr" : "imgOK";
+            Task<string> task2;
+            try
+            {
+                task2 = new FirebaseStorage("dtuparking.appspot.com").Child("Plate").Child(errOrOK).Child(id + "-" + inOut + ".jpg").GetDownloadUrlAsync();
+            }
+            catch (Exception e)
+            {
+                return null;
+            }
+
+            try
+            {
+                Console.WriteLine("OKOKOKOKO   " + task2.Result);
+            }
+            catch (Exception e)
+            {
+                return null;
+            }
+
+            return GetImgUrl.DownloadImage(task2.Result);
+        }
+        
+         Image getAvatarImage(string id)
+        {
+            
+            FirebaseResponse res = cl.Get("User/information/parkingMan/"+id+ "/avatar");
+            if (res.Body.Equals("null")) return null;
+            string task2 = res.ResultAs<string>();
+            Console.WriteLine("image avatar: "+task2);
+            Image img = GetImgUrl.DownloadImage(task2);
+            if (img != null) return img;
+            return null;
+
+
+        }
+        void getDatatoInfoAsync(int index)
+        {
+           
+            UserList u = lUOK[index];
+            lbID.Text = u.IDS;
+            lbName.Text = u.Name;
+            lbDataSend.Text = u.DateIn.ToString("dd/MM/yyyy");
+            lbHour.Text = u.DateIn.ToString("HH:mm:ss");
+
+            switch (u.Position)
+            {
+                case 2: lbPosition.Text = "Lecturers"; break;
+                case 3: lbPosition.Text = "Student"; break;
+                case 5: lbPosition.Text = "Visitor"; break;
+                default:
+                    lbPosition.Text = "none"; break;
+            }
+           
+            lbPlate.Text = u.TxtPlate + "";
+            Image plate=null;
+            Image ava=null;
+            Thread avaTh = new Thread(()=> {
+                ava = getAvatarImage(u.ID);
+                pbAvatar.Image = ava;
+
+                pbloadAvatar.Invoke(new Action(() => {
+                    
+                    pbloadAvatar.Visible = false;
+                }));
+               
+            });
+
+            
+            Thread t = new Thread(() => {
+
+                int timesLoop = 0;
+                loop3:
+                Console.WriteLine("Loop image");
+                if (timesLoop == 6) { MessageBox.Show("Get image fail"); tsBar.Value = 0; return; }
+
+               
+                Console.WriteLine(u.IsInOk);
+                if(u.IsInOk) plate= getDownloadImage(u.ID, false, true); 
+                else plate = getDownloadImage(u.ID, true, true);
+                timesLoop++;
+                if (plate == null) goto loop3;
+                pbPlate.Image = plate;
+
+                pbLoadPlate.Invoke(new Action(() => {
+                    
+                    pbLoadPlate.Visible = false;
+                }));
+            });
+            avaTh.Start();
+            t.Start();
+        }
+
+        private void logOutToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            loginForm.Show();
+            this.Dispose();
         }
     }
 }

@@ -30,3 +30,6 @@ E:\Capstone\APP_FINAL2\GATE_GUARD2\GATE_GUARD2\bin\Debug\EntityFramework.SqlServ
 E:\Capstone\APP_FINAL2\GATE_GUARD2\GATE_GUARD2\bin\Debug\EntityFramework.xml
 E:\Capstone\APP_FINAL2\GATE_GUARD2\GATE_GUARD2\bin\Debug\EntityFramework.SqlServer.xml
 E:\Capstone\APP_FINAL2\GATE_GUARD2\GATE_GUARD2\bin\Debug\shortid.dll
+E:\Capstone\APP_FINAL2\GATE_GUARD2\GATE_GUARD2\obj\Debug\GATE_GUARD2.Login.resources
+E:\Capstone\APP_FINAL2\GATE_GUARD2\GATE_GUARD2\bin\Debug\AutoMapper.dll
+E:\Capstone\APP_FINAL2\GATE_GUARD2\GATE_GUARD2\bin\Debug\AutoMapper.xml

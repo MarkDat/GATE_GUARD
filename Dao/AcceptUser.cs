@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ namespace GATE_GUARD2.Dao
         public string idT { get; set; }
         public bool parking { get; set; } = true;
         public string name { get; set; }
+        public int position { get; set; }
         //0 là đang chờ bảo vệ accept
         //1 là bảo vệ k cho qua
         //2 là đc cho qua
@@ -38,5 +40,11 @@ namespace GATE_GUARD2.Dao
         public int block { get; set; } = 1;
         public string dateSend { get; set; } = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         public string txtPlate { get; set; } = "none";
+
+        public Image imageInPlate { get; set; } = null;
+        public Image imageOutPlate { get; set; } = null;
+
+        //Nếu đi vào không có lỗi thì true, ngược lại
+        public bool isInOK { get; set; }
     }
 }
