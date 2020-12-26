@@ -165,14 +165,17 @@ namespace GATE_GUARD2
                 Console.WriteLine("Is in OK ? "+user.isInOK);
                 lAU.RemoveAll(x=>x.id.Equals(user.id));
 
-
+                
 
                 Thread t = new Thread(() => {
                     bool isNotNull = true;
                     while (isNotNull)
                     {
                         Console.WriteLine("Loop image");
-                        user.imageInPlate = getDownloadImage(user.id, true, true);
+                        if (user.isInOK == false) user.imageInPlate = getDownloadImage(user.id, true, true);
+                        else user.imageInPlate = getDownloadImage(user.id, false, true);
+
+
                         user.imageOutPlate = getDownloadImage(user.id, true, false);
                         if (user.imageInPlate != null && user.imageOutPlate != null) isNotNull = false;
                     }
@@ -180,8 +183,9 @@ namespace GATE_GUARD2
                     lAU.Add(user);
                     updateGrid();
                 });
-                t.Start();
+                
 
+                t.Start();
                 switch (user.codeErr)
                 {
                     case 0: Console.WriteLine("Sai biển số"); break;
@@ -334,15 +338,16 @@ namespace GATE_GUARD2
                     payMoney(u.id, moneyPay);
                     removeIdErrList(u);
                     //Add giao dịch
-                    addHistory(u, moneyPay);
+                    addHistory(u, u.position==3 ? moneyPay : 0);
                     //Xóa info trên APIParing
                     removeUserIn(u);
                 }
                 else
                 {
+                    UserList ul= lUOK.Find(x =>x.ID.Equals(u.id));
                     u.status = 1;
                     u.codeErr = 2;
-                    u.txtPlate = "NOD";
+                    u.txtPlate = ul.TxtPlate;
                     updateParking(u);
                     removeIdErrList(u);
                     u.status = 2;
@@ -361,7 +366,7 @@ namespace GATE_GUARD2
                 int index = int.Parse(e.RowIndex.ToString());
                 bool isOK;
                 AcceptUser ac = lAU[index];
-                if (MessageBox.Show("Accept ?", "Message", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question) == DialogResult.Yes)
+                if (MessageBox.Show("Accept ?", "Message", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
                     isOK = true;
 
@@ -431,8 +436,10 @@ namespace GATE_GUARD2
 
         Image getDownloadImage(string id, bool isErr, bool isIn)
         {
-            string inOut = isIn ? "in" : "out";
+
             string errOrOK = isErr ? "imgErr" : "imgOK";
+            string inOut = isIn ? "in" : "out";
+            Console.WriteLine("Plate "+ errOrOK+"  "+inOut);
             Task<string> task2;
             try
             {
