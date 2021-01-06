@@ -203,8 +203,8 @@ namespace GATE_GUARD2
                 dataGridView1.DataSource = null;
                 dataGridView1.Refresh();
                 dataGridView1.DataSource = lAU;
-
             }));
+            
         }
         void updateGrid2()
         {
@@ -276,9 +276,9 @@ namespace GATE_GUARD2
             cl.Push(@"History/parkingMan/moneyOut/" + ac.id, his);
             return true;
         }
-        public bool payMoney(string id, double payMoney)
+        public bool payMoney(string id,int position, double payMoney)
         {
-            int position = getPositionUser(id);
+            
             //Nếu là không phải sinh viên thì k add, trả về 1 OK
             if (position != 3) return true;
             double money = getMoney(id);
@@ -335,9 +335,12 @@ namespace GATE_GUARD2
                     //Đưa xác nhận sang cổng
                     updateParking(u);
                     //Thanh toán tiền
-                    payMoney(u.id, moneyPay);
+                    u.position = getPositionUser(u.id);
+
+                    payMoney(u.id,u.position, moneyPay);
                     removeIdErrList(u);
                     //Add giao dịch
+            
                     addHistory(u, u.position==3 ? moneyPay : 0);
                     //Xóa info trên APIParing
                     removeUserIn(u);
